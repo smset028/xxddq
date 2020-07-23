@@ -64,7 +64,7 @@ C 语言本身还提供 setjmp, longjmp 机制，实现函数间全局跳转机�
 
 
 我们以一个任务为例：
-unsigned char task0(){
+unsigned short task0(){
 _SS
 while(1){
 WaitX(50);
@@ -74,25 +74,25 @@ _EE
 }
 这个任务的作用是： 每 500 毫秒，让 LED1 亮灭翻转一次。
 我们先把宏替代了：
-unsigned char task0(){
+unsigned short task0(){
 static unsigned char _lc=0; switch(_lc){default:
 while(1){
 do { _lc=(__LINE__%255)+1; return 50 ; case (__LINE__%255)+1:;} while(0);
 LED0=!LED0;
 }
-;}; _lc=0; return 255;
+;}; _lc=0; return 65535;
 }
 这里__LINE__实际上是一个行号，在一个文件内，行号从 1 开始，一直递增。
 （使用__LINE__行号来记录代码运行位置，在已知信息中，最早是由 PT Thread 采用的，PT
 Thread 是一种多任务机制，有兴趣的可以自行去网上搜索相关资料）
 比如 WaitX(50);这个代码行在第 100 行，那么实际上任务函数内就是：
-unsigned char task0(){
+unsigned short task0(){
 static unsigned char _lc=0; switch(_lc){default:
 while(1){
 do { _lc=(100%255)+1; return 50 ; case (100%255)+1:;} while(0);
 LED0=!LED0;
 }
-;}; _lc=0; return 255;
+;}; _lc=0; return 65535;
 }
 从这个 task0 任务函数，我们可以看到，一开头，就申明了 static unsigned char _lc=0;
 这个静态变量。初值为 0， 这个_lc 变量，就是任务函数用来记录运行位置的变量。
@@ -118,7 +118,7 @@ task0 任务函数内最后一个 case 的位置，再也没有办法从头进�
 接下来，就带来了额外的麻烦事儿：由于_lc 是 unsigned char ,取值为 0-255，那么，当
 代码行号为 256 时，会怎样？ 这个时候_lc=256;实际上导致_lc 的值变为 0，那么这个时候就
 有问题了：这会导致任务函数此时会变成和任务结束时_lc 取值一样，都是 0 了！也即是说任
-务函数结束时，和任务行号取值为 256 的整数倍时，想同了。
+务函数结束时，和任务行号取值为 256 的整数倍时相同了。
 我们当然是不希望这个发生的，所以需要进行补救： 让_lc 在任务函数内取值不可能为 0，
 于是就有了_lc=(__LINE__%255)+1 的取值方式，这个方式就是让_lc 取值变为 1-255,从而避开
 了 0 值。
@@ -214,7 +214,7 @@ RunTask(task0,0);//任务具有精确按时获得执行的权限，要求：task
 当引入抢占式多任务后，就需要认真考虑哪些变量有可能被中断里面的任务给修改。
 调度框架描述：
 最后一个部分，是小小调度器的延时框架。
-小小调度器 V1.1 有一个名为 timers 的数组： volatile unsigned char timers[MAXTASKS];
+小小调度器 V1.1 有一个名为 timers 的数组： volatile unsigned short timers[MAXTASKS];
 这里的 MAXTASKS 就是顶级任务的个数，最大为 255 个。
 我们知道每个任务函数，在开头只有一个简单的 switch 跳转，这个 switch 就像 goto 一样，
 只负责跳转到相应行。也就是说只要进入了函数，任务就会往后面的代码执行。
@@ -248,16 +248,16 @@ RunTask(task0,0);//任务具有精确按时获得执行的权限，要求：task
 <0.5 个 ticket
 }
 展开其中的 UpdateTimers()宏：
-do{unsigned char i; for(i=MAXTASKS;i>0 ;i--){if((timers[i-1]!=0)&&(timers[i-1]!=255))
+do{unsigned char i; for(i=MAXTASKS;i>0 ;i--){if((timers[i-1]!=0)&&(timers[i-1]!=65535))
 timers[i-1]--;}} while(0);
-就看得出来，当每个任务的 timer 变量不为 0，或者不为 255 时，timer 变量值都在减少。
+就看得出来，当每个任务的 timer 变量不为 0，或者不为 65535 时，timer 变量值都在减少。
 当任务的 timer 变量不为 0 时，变量值减少，这个很容易理解，因为 0 已经是最小值了。
-但是还有一个条件：当任务的 timer 变量为 255 时，也不发生变化。这不就会导致这个任务永
-远不会再进入了吗？因为一直是 255。
+但是还有一个条件：当任务的 timer 变量为 65535 时，也不发生变化。这不就会导致这个任务永
+远不会再进入了吗？因为一直是 65535。
 让我们再次看一下任务结尾出的_EE 宏，就能明白了：
-#define _EE ;}; _lc=0; return 255;
-当任务函数执行到最后时，返回 255，那么这个任务再也不会被执行了。这个就恰好体现了任
-务的 timer 变量为 255 的意义了：任务对用的 timers[TASKID]值为 255 意味着任务终止。
+#define _EE ;}; _lc=0; return 65535;
+当任务函数执行到最后时，返回 65535，那么这个任务再也不会被执行了。这个就恰好体现了任
+务的 timer 变量为 65535 的意义了：任务对用的 timers[TASKID]值为 65535 意味着任务终止。
 那么，当一个任务作为子任务，这一次流程执行完毕，下一次又被父任务调用，该如何处理呢？
 我们来看调用子任务的宏 CallSub：
 #define CallSub(SubTaskName) do {unsigned char currdt; _lc=(__LINE__%255)+1; return
@@ -266,9 +266,9 @@ while(0);
 这个宏，只是记录了父任务的当前行号，然后返回 0；
 意味着几乎无需等待，调度框架立即会再次进入父任务。执行 currdt=SubTaskName();
 if(currdt!=255) return currdt;
-这意味着，当子任务结束返回 255 时，这个 255 值并不写入父任务的 timers 数组对应的变量，
+这意味着，当子任务结束返回 65536 时，这个 65535 值并不写入父任务的 timers 数组对应的变量，
 而是直接执行父任务后面的代码：也就等于是父任务已经完成这次子任务的调用，往后执行后
-续代码。当子任务返回的不是 255 的值时，我们可以看到父任务会返回这个值：return currdt;
+续代码。当子任务返回的不是 65535 的值时，我们可以看到父任务会返回这个值：return currdt;
 这会导致父任务在等待一段时间后才会再次进入。
 这可以解释为：因为父任务在子任务未结束时，不能去执行子任务后的代码，因此把子任务需
 要等待的时间，转由让父任务来进行等待。这样就可以让子任务共用父任务的时间延迟变量，
@@ -298,42 +298,13 @@ if(currdt!=255) return currdt;
 6） 稳定性代价：小小调度器本质上仅仅是几个宏而已，未涉及任何对内部寄存器或堆栈的操
 作，避免了引入不稳定风险因素，所有操作都在可预见，可把控的前提下进行。
 除了以上三点需要注意的外，还容易出的错误有：
-1） WaitX 里面的值>=255 了，因为 v1.1 版本的值最大只能是 254。
+1） WaitX 里面的值>=65535 了，因为 v1.1 版本的值最大只能是 65534。
 2） While,for 循环里，忘了写 WaitX，导致程序死循环。
 3） 任务函数重入，也就是说一个任务函数同时被几个顶级任务调用。这在 V1.1 里是不允许的。
 4） 妄图在普通函数里使用 WaitX。这个是无法通过编译的。
 5） 在 RunTaskA 调度的任务里使用 waitx(0),导致后续任务无法运行。
 附录: 小小调度器 V1.1.c
-Skip to content
-Search or jump to…
 
-Pull requests
-Issues
-Marketplace
-Explore
- 
-@smset028 
-smset028
-/
-xxddq
-1
-00
-Code
-Issues
-Pull requests
-Actions
-Projects
-Wiki
-Security
-Insights
-Settings
-xxddq/main.c
-@smset028
-smset028 Create main.c
-Latest commit c980b17 8 minutes ago
- History
- 1 contributor
-92 lines (73 sloc)  2.48 KB
   
 #include <stc89c51.h>
 
